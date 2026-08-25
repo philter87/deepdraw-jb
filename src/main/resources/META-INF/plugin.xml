@@ -1,0 +1,88 @@
+<idea-plugin>
+  <id>ai.deepdraw.jetbrains</id>
+  <name>DeepDraw</name>
+  <vendor url="https://deepdraw.ai">philter87</vendor>
+
+  <description><![CDATA[
+    Draw and read <b>DeepDraw</b> drawings in JetBrains IDEs. Every edit is saved to the file you opened.
+    <p>
+      Opening a <code>.deepdraw.html</code> or <code>.deepdraw.json</code> shows the drawing on a canvas;
+      the file's text stays one tab away. Drawings are <b>hierarchical</b> — any shape can contain a whole
+      nested drawing and its own notes — and the <b>DeepDraw</b> tool window is that hierarchy.
+    </p>
+    <p>
+      A <code>.deepdraw.html</code> is self-contained and opens in any browser on its own.
+      A <code>.deepdraw.json</code> is the same drawing as plain JSON, which diffs cleanly in git.
+    </p>
+    <p>Requires a JetBrains Runtime with JCEF, which is the default for every JetBrains IDE.</p>
+  ]]></description>
+
+  <depends>com.intellij.modules.platform</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <!--
+      Bound by file name rather than by a file type: a `.deepdraw.html` is an
+      HTML file and a `.deepdraw.json` is a JSON file, and declaring a type for
+      either would take them away from the editors that already understand them.
+      The drawing is placed before the default editor, so clicking one opens the
+      canvas and the text is the tab beside it.
+    -->
+    <fileEditorProvider implementation="ai.deepdraw.jetbrains.DeepDrawFileEditorProvider"/>
+
+    <applicationService serviceImplementation="ai.deepdraw.jetbrains.DeepDrawSettings"/>
+
+    <applicationConfigurable
+        parentId="tools"
+        instance="ai.deepdraw.jetbrains.DeepDrawConfigurable"
+        id="ai.deepdraw.settings"
+        displayName="DeepDraw"/>
+
+    <toolWindow
+        id="DeepDraw"
+        anchor="right"
+        icon="AllIcons.Toolwindows.ToolWindowStructure"
+        factoryClass="ai.deepdraw.jetbrains.DeepDrawHierarchyToolWindowFactory"/>
+
+    <notificationGroup id="DeepDraw" displayType="BALLOON"/>
+  </extensions>
+
+  <actions>
+    <group id="DeepDraw.Menu" text="DeepDraw" popup="true">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+
+      <action id="DeepDraw.New"
+              class="ai.deepdraw.jetbrains.NewDrawingAction"
+              text="New Drawing"
+              description="Create a DeepDraw drawing and open it"/>
+      <separator/>
+      <action id="DeepDraw.ExportHtml"
+              class="ai.deepdraw.jetbrains.ExportHtmlAction"
+              text="Export as Self-Contained HTML"
+              description="Write the drawing as a page that opens in any browser"/>
+      <action id="DeepDraw.ExportJson"
+              class="ai.deepdraw.jetbrains.ExportJsonAction"
+              text="Export as JSON"
+              description="Write the drawing's document as plain JSON"/>
+      <action id="DeepDraw.ExportPng"
+              class="ai.deepdraw.jetbrains.ExportPngAction"
+              text="Export as PNG"
+              description="Write a picture of the drawing on the canvas"/>
+    </group>
+
+    <!-- The one export a reader reaches for while drawing, on the tab's own bar. -->
+    <action id="DeepDraw.ExportPng.Editor"
+            class="ai.deepdraw.jetbrains.ExportPngAction"
+            text="Export as PNG"
+            icon="AllIcons.Actions.Download"
+            description="Write a picture of the drawing on the canvas">
+      <add-to-group group-id="EditorTabPopupMenu" anchor="last"/>
+    </action>
+
+    <action id="DeepDraw.New.NewFile"
+            class="ai.deepdraw.jetbrains.NewDrawingAction"
+            text="DeepDraw Drawing"
+            description="Create a DeepDraw drawing and open it">
+      <add-to-group group-id="NewGroup" anchor="last"/>
+    </action>
+  </actions>
+</idea-plugin>

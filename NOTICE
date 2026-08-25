@@ -1,0 +1,11 @@
+DeepDraw for JetBrains IDEs
+Copyright (c) 2026 Philip Christiansen
+
+This plugin is licensed under the Business Source License 1.1; see LICENSE.
+
+It packages the DeepDraw drawing library, which is licensed separately under
+the same terms. The `fetchDeepDrawLib` task in build.gradle.kts downloads that
+library together with its own LICENSE and NOTICE into the plugin's resources,
+and all of them travel into the built plugin zip — the library's NOTICE carries
+the third-party attributions the bundle inlines (marked, MIT; the Material
+Symbols icon paths, Apache-2.0).

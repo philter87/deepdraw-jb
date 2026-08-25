@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "id": "sample",
+  "title": "Checkout",
+  "rootId": "root",
+  "nodes": {
+    "root": {
+      "kind": "shape",
+      "type": "root",
+      "parentId": null
+    },
+    "web": {
+      "kind": "shape",
+      "type": "rect",
+      "parentId": "root",
+      "x": 80,
+      "y": 80,
+      "w": 200,
+      "h": 90,
+      "text": "Web",
+      "markdown": "# Web\n\nThe storefront."
+    },
+    "api": {
+      "kind": "shape",
+      "type": "rect",
+      "parentId": "root",
+      "x": 380,
+      "y": 80,
+      "w": 200,
+      "h": 90,
+      "text": "API"
+    },
+    "db": {
+      "kind": "shape",
+      "type": "ellipse",
+      "parentId": "root",
+      "x": 380,
+      "y": 260,
+      "w": 200,
+      "h": 110,
+      "text": "Ledger"
+    },
+    "a1": {
+      "kind": "shape",
+      "type": "arrow",
+      "parentId": "root",
+      "from": "web",
+      "to": "api"
+    },
+    "a2": {
+      "kind": "shape",
+      "type": "arrow",
+      "parentId": "root",
+      "from": "api",
+      "to": "db"
+    },
+    "auth": {
+      "kind": "shape",
+      "type": "rect",
+      "parentId": "api",
+      "x": 60,
+      "y": 60,
+      "w": 180,
+      "h": 80,
+      "text": "Auth"
+    }
+  }
+}
