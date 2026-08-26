@@ -1,0 +1,103 @@
+# Releases the plugin: a tag is the trigger, the Marketplace is the destination,
+# and a GitHub release with the same zip attached is the record.
+#
+#   git tag v0.5.0 && git push origin v0.5.0
+#
+# The version itself is never set here. It is `pluginVersion` in
+# gradle.properties, written by `deepdraw/sync-js.sh` because the library and
+# everything embedding it share one number; the tag only has to agree with it,
+# and the first job step is that check.
+#
+# Two secrets, both under Settings → Secrets and variables → Actions:
+#
+#   PUBLISH_TOKEN                                       required — the upload
+#   CERTIFICATE_CHAIN, PRIVATE_KEY, PRIVATE_KEY_PASSWORD   optional — the signature
+#
+# Without the second set the zip goes up unsigned and the Marketplace signs it,
+# which is the supported thing to do and needs no key of anyone's own.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  # Re-runs a release that failed after the tag was already pushed. Run it
+  # *from the tag* — the version check below refuses anything else. A re-run
+  # after the upload itself succeeded stops at the Marketplace, which will not
+  # take a version it already has; that refusal is the correct one.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The tag is a claim about what is being released and gradle.properties is
+      # what actually gets built. Disagreeing means a `v0.5.0` release holding
+      # 0.4.1, which nobody notices until someone reads the plugin's page.
+      - name: The tag and the version agree
+        id: version
+        run: |
+          if [ "$GITHUB_REF_TYPE" != tag ]; then
+            echo "::error::run this workflow from a tag, not from $GITHUB_REF_NAME"
+            exit 1
+          fi
+          version=$(sed -n 's/^pluginVersion *= *//p' gradle.properties | tr -d '[:space:]')
+          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match pluginVersion $version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # 21 because the platform's own classes are Java 21; the plugin is still
+      # emitted for 17 (build.gradle.kts).
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # `check` is the tests. `verifyPlugin` is the promise `sinceBuild` makes:
+      # it reads the plugin against every IDE that claim covers, which is the
+      # same verifier JetBrains runs on what arrives. It downloads those IDEs,
+      # and it is why this job takes minutes rather than seconds — a release is
+      # the one place that is worth waiting for.
+      #
+      # `fetchDeepDrawLib` pulls the pinned DeepDraw build from the CDN here, so
+      # a tag can only be released once the library CI has published that
+      # version. A build failing on a 404 for `v<deepdrawVersion>` is that, and
+      # the fix is to wait for the library, not to touch this repo.
+      - name: Check
+        run: ./gradlew check verifyPlugin --console=plain
+
+      - name: Publish to the JetBrains Marketplace
+        env:
+          PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+          CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
+        run: ./gradlew publishPlugin --console=plain
+
+      # The same zip that went to the Marketplace, kept where a reader who wants
+      # "Install Plugin from Disk…" can reach it without an account.
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          zip="build/distributions/deepdraw-jb-${{ steps.version.outputs.version }}.zip"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$zip" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes "$zip"
+          fi

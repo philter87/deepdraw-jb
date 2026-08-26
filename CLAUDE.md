@@ -187,7 +187,19 @@ the only way to try a library change and a plugin change in one sitting.
 ./gradlew check          # compile, the format tests, and the plugin verifier's structure checks
 ./gradlew buildPlugin    # the installable zip, in build/distributions
 ./gradlew runIde         # a sandbox IDE with the plugin in it
+./gradlew publishPlugin  # upload that zip to the Marketplace (PUBLISH_TOKEN)
 ```
+
+A release is a `v*` tag: `.github/workflows/release.yml` checks that the tag and
+`pluginVersion` agree, runs `check` and `verifyPlugin`, publishes, and attaches
+the same zip to a GitHub release. `publishPlugin` by hand is the fallback, not
+the route. The Marketplace page itself was created once, by hand, from a zip —
+the upload API only writes to a page that already exists. Signing and the token are read
+out of the environment and nothing else — a key or a token in a file here would
+be a key or a token in the repository. The channel is derived from
+`pluginVersion` rather than passed, so a pre-release cannot reach the default
+channel by someone forgetting a flag. README, "Publishing to the Marketplace",
+is the walk-through.
 
 `runIde` is the only way to see the canvas: JCEF needs a display, so nothing
 about the browser is covered by a test. What *is* covered is the part that

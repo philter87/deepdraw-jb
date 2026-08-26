@@ -113,6 +113,17 @@ tasks.processResources {
     from(deepdrawLibDir) { into("deepdraw-web/lib") }
 }
 
+/**
+ * A secret out of the environment, where *set but empty* is not a value.
+ *
+ * A workflow writes `${{ secrets.CERTIFICATE_CHAIN }}` whether or not that
+ * secret exists, and an unset one arrives as an empty string. Read literally
+ * that is a certificate, and the release fails signing with it instead of
+ * going up unsigned, which is what a repository with no key of its own means.
+ * The trim is for the newline a shell adds to a key pasted through a pipe.
+ */
+fun secret(name: String) = providers.environmentVariable(name).map(String::trim).filter { it.isNotEmpty() }
+
 intellijPlatform {
     pluginConfiguration {
         id = "ai.deepdraw.jetbrains"
@@ -127,6 +138,40 @@ intellijPlatform {
             // used here are all present from 2023.3 onward.
             sinceBuild = "233"
             untilBuild = provider { null }
+        }
+    }
+
+    /**
+     * Signing and publishing are configured out of the environment, never out
+     * of a file here: a private key and a Marketplace token are the two things
+     * that must not be committed.
+     *
+     * | `PRIVATE_KEY`, `PRIVATE_KEY_PASSWORD`, `CERTIFICATE_CHAIN` | sign the zip |
+     * | `PUBLISH_TOKEN` | upload it |
+     *
+     * None of them set is the normal state: `buildPlugin` and `runIde` do not
+     * read them, and only `publishPlugin` complains. Signing is optional — the
+     * Marketplace signs whatever arrives unsigned — and `publishPlugin` uploads
+     * the signed zip when a key was there and the plain one when it was not.
+     */
+    signing {
+        certificateChain = secret("CERTIFICATE_CHAIN")
+        privateKey = secret("PRIVATE_KEY")
+        password = secret("PRIVATE_KEY_PASSWORD")
+    }
+
+    publishing {
+        token = secret("PUBLISH_TOKEN")
+
+        /**
+         * The channel is read off the version rather than set by hand, because
+         * the two disagreeing is how a pre-release reaches everybody: a plain
+         * `0.4.0` goes to the default channel, and anything with a suffix —
+         * `0.5.0-beta.1` — goes to a channel named after it, which a reader
+         * only sees after adding that channel's repository URL.
+         */
+        channels = providers.gradleProperty("pluginVersion").map {
+            listOf(it.substringAfter('-', "").substringBefore('.').ifEmpty { "default" })
         }
     }
 

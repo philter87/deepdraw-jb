@@ -55,10 +55,63 @@ in every default it does not find.
 To install it into your own IDE:
 
 ```bash
-./gradlew buildPlugin      # build/distributions/deepdraw-jb-0.1.0.zip
+./gradlew buildPlugin      # build/distributions/deepdraw-jb-<pluginVersion>.zip
 ```
 
 then **Settings → Plugins → ⚙ → Install Plugin from Disk…**.
+
+## Publishing to the Marketplace
+
+**A tag is the release.** `.github/workflows/release.yml` runs the checks, uploads
+to the Marketplace and attaches the same zip to a GitHub release:
+
+```bash
+git tag v0.5.0 && git push origin v0.5.0
+```
+
+The tag only has to *agree* with `pluginVersion` — the first step of the job
+compares them and stops if they differ, because a `v0.5.0` release holding
+0.4.1 is not noticed until somebody reads the plugin's page. The version itself
+moves with `deepdraw/sync-js.sh`, since the library and everything embedding it
+share one number.
+
+The build fetches the pinned DeepDraw bundle from the CDN, so a tag can only be
+released once the library's own CI has published that version. A release
+failing on a 404 for `v<deepdrawVersion>` is that, and the fix is to wait.
+
+**One secret is required**, under Settings → Secrets and variables → Actions:
+`PUBLISH_TOKEN`, from plugins.jetbrains.com → your profile → **My Tokens**. The
+same token publishes from a laptop, which is the fallback when the workflow is
+in the way:
+
+```bash
+PUBLISH_TOKEN=… ./gradlew check verifyPlugin publishPlugin
+```
+
+`check` compiles and runs the format tests; `verifyPlugin` reads the plugin
+against every IDE `sinceBuild` claims, with the same verifier JetBrains runs on
+what arrives. Both run in the workflow too.
+
+**The page was created by hand, once** — the upload API only writes to a page
+that already exists, so a new plugin starts at
+[plugins.jetbrains.com/plugin/add](https://plugins.jetbrains.com/plugin/add)
+and waits for JetBrains to approve it. Everything the page shows comes out of
+the zip: the name, the description and the compatibility range are
+`plugin.xml`, so correcting a typo in the description means releasing a new
+build, not editing the page.
+
+**The channel is read off the version.** A plain `0.5.0` goes to the default
+channel, which every IDE checks; a `0.6.0-beta.1` goes to a `beta` channel,
+which only reaches readers who have added that channel's repository URL. There
+is nothing to set — the suffix is the switch.
+
+**Signing is optional.** The Marketplace signs whatever arrives unsigned, and
+that is enough for the IDE to trust it. To sign with your own certificate
+instead, add `CERTIFICATE_CHAIN`, `PRIVATE_KEY` and `PRIVATE_KEY_PASSWORD` as
+secrets (or as environment variables locally); `signPlugin` then runs before
+`publishPlugin` and the signed zip is what goes up. JetBrains'
+[Plugin Signing](https://plugins.jetbrains.com/docs/intellij/plugin-signing.html)
+page is how the key is made.
 
 ## Settings
 
