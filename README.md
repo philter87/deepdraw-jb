@@ -62,22 +62,32 @@ then **Settings → Plugins → ⚙ → Install Plugin from Disk…**.
 
 ## Publishing to the Marketplace
 
-**A tag is the release.** `.github/workflows/release.yml` runs the checks, uploads
-to the Marketplace and attaches the same zip to a GitHub release:
+**A new version on `main` is the release.** `.github/workflows/release.yml` runs
+on every push to `main`, and its first step asks one question: has
+`v<pluginVersion>` been released already? Almost always it has, and the job
+stops there in seconds. When it has not, that push is a release — the checks
+run, the zip goes to the Marketplace, and the job writes the `v` tag and a
+GitHub release with the same zip attached.
+
+So releasing is bumping the version and merging it:
 
 ```bash
-git tag v0.5.0 && git push origin v0.5.0
+../deepdraw/sync-js.sh --bump 0.6.2   # writes pluginVersion here, and everywhere else
+git commit -am "Take the shared DeepDraw version, 0.6.2" && git push
 ```
 
-The tag only has to *agree* with `pluginVersion` — the first step of the job
-compares them and stops if they differ, because a `v0.5.0` release holding
-0.4.1 is not noticed until somebody reads the plugin's page. The version itself
-moves with `deepdraw/sync-js.sh`, since the library and everything embedding it
-share one number.
+The version itself is never typed into this repo — it moves with
+`deepdraw/sync-js.sh`, since the library and everything embedding it share one
+number. The tag is written *by the job that published*, after the upload
+succeeds, so a tag naming a version nobody released, or a release the tag
+disagrees with, is not a state this can reach.
 
-The build fetches the pinned DeepDraw bundle from the CDN, so a tag can only be
-released once the library's own CI has published that version. A release
-failing on a 404 for `v<deepdrawVersion>` is that, and the fix is to wait.
+The build fetches the pinned DeepDraw bundle from the CDN, so a version can only
+be released once the library's own CI has published it. A release failing on a
+404 for `v<deepdrawVersion>` is that, and the fix is to wait.
+
+**Re-running is safe.** Settings → Actions → Release → *Run workflow* does
+nothing once the tag exists; it is there for a release that failed halfway.
 
 **One secret is required**, under Settings → Secrets and variables → Actions:
 `PUBLISH_TOKEN`, from plugins.jetbrains.com → your profile → **My Tokens**. The

@@ -1,12 +1,18 @@
-# Releases the plugin: a tag is the trigger, the Marketplace is the destination,
-# and a GitHub release with the same zip attached is the record.
+# Releases the plugin: a version that has not been released yet is the trigger,
+# the Marketplace is the destination, and a tag plus a GitHub release with the
+# same zip attached is the record.
 #
-#   git tag v0.5.0 && git push origin v0.5.0
+# **Pushing to `main` is the whole of it.** `pluginVersion` in gradle.properties
+# is the version — written by `deepdraw/sync-js.sh`, because the library and
+# everything embedding it share one number — and the first step of the job asks
+# whether `v<pluginVersion>` has been released already. If it has, the job stops
+# there, which is what almost every push to `main` does and it costs seconds. If
+# it has not, that push is a release: checks, upload, tag, GitHub release.
 #
-# The version itself is never set here. It is `pluginVersion` in
-# gradle.properties, written by `deepdraw/sync-js.sh` because the library and
-# everything embedding it share one number; the tag only has to agree with it,
-# and the first job step is that check.
+# So a release is made by bumping the version and merging it, and the tag is
+# written by the job that published rather than by the hand that asked for it —
+# a tag naming a version nobody released, or a release the tag disagrees with,
+# is not a state this can reach.
 #
 # Two secrets, both under Settings → Secrets and variables → Actions:
 #
@@ -20,11 +26,12 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
-  # Re-runs a release that failed after the tag was already pushed. Run it
-  # *from the tag* — the version check below refuses anything else. A re-run
-  # after the upload itself succeeded stops at the Marketplace, which will not
-  # take a version it already has; that refusal is the correct one.
+    branches: [main]
+  # Re-runs a release that failed. The version gate above is what makes that
+  # safe to press: it does nothing at all once `v<pluginVersion>` exists. A
+  # re-run after the upload itself succeeded but the tag was never written
+  # stops at the Marketplace, which will not take a version it already has;
+  # that refusal is the correct one.
   workflow_dispatch:
 
 permissions:
@@ -42,46 +49,55 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The tag is a claim about what is being released and gradle.properties is
-      # what actually gets built. Disagreeing means a `v0.5.0` release holding
-      # 0.4.1, which nobody notices until someone reads the plugin's page.
-      - name: The tag and the version agree
+      # The one question that decides whether this push is a release. Asked of
+      # the tags rather than of the Marketplace: the tag is written last, by the
+      # job that published, so a version with a tag is a version that went up.
+      - name: Has this version been released?
         id: version
         run: |
-          if [ "$GITHUB_REF_TYPE" != tag ]; then
-            echo "::error::run this workflow from a tag, not from $GITHUB_REF_NAME"
-            exit 1
-          fi
           version=$(sed -n 's/^pluginVersion *= *//p' gradle.properties | tr -d '[:space:]')
-          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
-            echo "::error::tag $GITHUB_REF_NAME does not match pluginVersion $version"
+          if [ -z "$version" ]; then
+            echo "::error::gradle.properties has no pluginVersion"
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1; then
+            echo "new=false" >> "$GITHUB_OUTPUT"
+            echo "v$version is released already — nothing to do." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+            echo "Releasing v$version." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       # 21 because the platform's own classes are Java 21; the plugin is still
       # emitted for 17 (build.gradle.kts).
       - uses: actions/setup-java@v4
+        if: steps.version.outputs.new == 'true'
         with:
           distribution: temurin
           java-version: "21"
 
       - uses: gradle/actions/setup-gradle@v4
+        if: steps.version.outputs.new == 'true'
 
       # `check` is the tests. `verifyPlugin` is the promise `sinceBuild` makes:
-      # it reads the plugin against every IDE that claim covers, which is the
-      # same verifier JetBrains runs on what arrives. It downloads those IDEs,
-      # and it is why this job takes minutes rather than seconds — a release is
-      # the one place that is worth waiting for.
+      # it reads the plugin against the oldest IDE that claim covers, the one it
+      # is built on and the newest released, with the same verifier JetBrains
+      # runs on what arrives. It downloads those IDEs, and it is why this job
+      # takes minutes rather than seconds — a release is the one place that is
+      # worth waiting for, and the version gate is what keeps every other push
+      # from paying it.
       #
       # `fetchDeepDrawLib` pulls the pinned DeepDraw build from the CDN here, so
-      # a tag can only be released once the library CI has published that
-      # version. A build failing on a 404 for `v<deepdrawVersion>` is that, and
-      # the fix is to wait for the library, not to touch this repo.
+      # a version can only be released once the library CI has published it. A
+      # build failing on a 404 for `v<deepdrawVersion>` is that, and the fix is
+      # to wait for the library, not to touch this repo.
       - name: Check
+        if: steps.version.outputs.new == 'true'
         run: ./gradlew check verifyPlugin --console=plain
 
       - name: Publish to the JetBrains Marketplace
+        if: steps.version.outputs.new == 'true'
         env:
           PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
           CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
@@ -89,15 +105,27 @@ jobs:
           PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
         run: ./gradlew publishPlugin --console=plain
 
+      # Written after the upload, never before: the tag is this workflow's
+      # record that the version went out, and it is what stops the next push to
+      # `main` from publishing the same one again.
+      - name: Tag the commit that was released
+        if: steps.version.outputs.new == 'true'
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          git tag "v$version"
+          git push origin "v$version"
+
       # The same zip that went to the Marketplace, kept where a reader who wants
       # "Install Plugin from Disk…" can reach it without an account.
       - name: GitHub release
+        if: steps.version.outputs.new == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          zip="build/distributions/deepdraw-jb-${{ steps.version.outputs.version }}.zip"
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$zip" --clobber
+          version="${{ steps.version.outputs.version }}"
+          zip="build/distributions/deepdraw-jb-$version.zip"
+          if gh release view "v$version" >/dev/null 2>&1; then
+            gh release upload "v$version" "$zip" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes "$zip"
+            gh release create "v$version" --title "v$version" --generate-notes "$zip"
           fi
