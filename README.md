@@ -86,6 +86,17 @@ The build fetches the pinned DeepDraw bundle from the CDN, so a version can only
 be released once the library's own CI has published it. A release failing on a
 404 for `v<deepdrawVersion>` is that, and the fix is to wait.
 
+**If the upload succeeded and the job failed after it**, the Marketplace has
+the version and GitHub has no release for it. Publishing it again is not the
+repair — the Marketplace will not take a version twice — so finish the record by
+hand from the released commit:
+
+```bash
+./gradlew buildPlugin
+gh release create v0.6.1 --target <commit> --generate-notes \
+  build/distributions/deepdraw-jb-0.6.1.zip
+```
+
 **Run workflow releases whatever `main` says**, gate and all skipped —
 Settings → Actions → Release → *Run workflow*. It is for a release that failed
 after the version bump had already landed, when there is no push left to carry

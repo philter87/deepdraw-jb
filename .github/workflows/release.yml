@@ -135,6 +135,19 @@ jobs:
       # is written here, by `gh release create`, and only after the upload
       # succeeded: it marks the commit that was released rather than asking for
       # a release.
+      #
+      # It has to be this and not `git push origin "v$version"`, which is what
+      # 0.6.1 failed on:
+      #
+      #   ! [remote rejected] v0.6.1 -> v0.6.1 (refusing to allow a GitHub App
+      #     to create or update workflow `.github/workflows/release.yml`
+      #     without `workflows` permission)
+      #
+      # A ref pushed over git by `GITHUB_TOKEN` is refused when the commit it
+      # points at touches `.github/workflows`, and `workflows` is not a
+      # permission `GITHUB_TOKEN` can be granted — so any release of a commit
+      # that edited this file would fail there, after publishing. The releases
+      # API writes the tag server-side and is not subject to it.
       - name: GitHub release
         if: steps.version.outputs.new == 'true'
         env:
