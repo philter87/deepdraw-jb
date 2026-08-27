@@ -202,19 +202,22 @@ the only way to try a library change and a plugin change in one sitting.
 ```
 
 A release is a push to `main` that moves `pluginVersion`:
-`.github/workflows/release.yml` runs on every push and compares the version in
-this commit with the version in the one the push started from. Equal — which is
-almost every push — and the job stops in seconds, before it can spend minutes
-downloading IDEs for the verifier. Different, and it runs `check` and
-`verifyPlugin`, publishes, and records the release on GitHub with the same zip
-attached.
+`.github/workflows/publish.yml` compares the version in this commit with the
+version in the one the push started from, and publishes only when they differ.
+Equal — which is every push that is not a bump — and the job stops in seconds,
+before it can spend minutes downloading IDEs for the verifier.
 
-**The version is the request, and the tag is only the record.** Asking the
-version directly is what leaves nothing to keep in step with it: no tag to push
-by hand, none to forget, none naming a version nobody released. The `v` tag
-exists because a GitHub release is a tag — written by `gh release create` after
-the upload succeeded. `publishPlugin` by hand is the fallback, not the route. The Marketplace page itself was created once, by hand, from a zip —
-the upload API only writes to a page that already exists. Signing and the token are read
+**It is `deepdraw-vs`'s publish workflow with a JetBrains build in the middle,
+and deliberately nothing more.** No tag, no GitHub release, no notes: the
+Marketplace is where the plugin is installed from, JetBrains asks for none of
+it, and the sibling does none of it either. A release that also had to write a
+tag is a release with a second way to fail — which is how 0.6.1 went out and
+then failed anyway, on a `git push` of a tag that `GITHUB_TOKEN` may not make
+when the commit touches `.github/workflows`. `publishPlugin` by hand is the
+fallback, not the route.
+
+The Marketplace page itself was created once, by hand, from a zip — the upload
+API only writes to a page that already exists. Signing and the token are read
 out of the environment and nothing else — a key or a token in a file here would
 be a key or a token in the repository. The channel is derived from
 `pluginVersion` rather than passed, so a pre-release cannot reach the default

@@ -1,0 +1,123 @@
+# Publishes to the JetBrains Marketplace when the version changes.
+#
+# The Marketplace refuses a version it already has, so a run that fired on an
+# unrelated commit would fail rather than do nothing. The gate is therefore the
+# version itself: this publishes only when `pluginVersion` in gradle.properties
+# differs from the one the push started from. That number is written by
+# `deepdraw/sync-js.sh`, because the library and everything embedding it share
+# one version — so releasing is bumping it and merging, and there is nothing
+# else to keep in step.
+#
+# This is `deepdraw-vs`'s publish workflow with a JetBrains build in the middle.
+# No tag, no GitHub release: the Marketplace is where the plugin is installed
+# from, and a second copy of the zip on a release page is a second thing to get
+# right for nobody's benefit.
+#
+# One secret is required, under Settings → Secrets and variables → Actions:
+#
+#   PUBLISH_TOKEN                                       required — the upload
+#   CERTIFICATE_CHAIN, PRIVATE_KEY, PRIVATE_KEY_PASSWORD   optional — the signature
+#
+# Without the second set the zip goes up unsigned and the Marketplace signs it,
+# which is the supported thing to do and needs no key of anyone's own.
+
+name: Publish
+
+on:
+  push:
+    branches: [main]
+    paths: ["gradle.properties"]
+  # Publishes whatever main says, gate skipped — for a release that failed
+  # after the bump had already landed, when there is no push left to carry it.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+        # The gate reads the commit this push started from, which a shallow
+        # checkout does not have.
+        with:
+          fetch-depth: 0
+
+      - name: Has the version changed?
+        id: gate
+        run: |
+          version=$(sed -n 's/^pluginVersion *= *//p' gradle.properties | tr -d '[:space:]')
+          if [ -z "$version" ]; then
+            echo "::error::gradle.properties has no pluginVersion"
+            exit 1
+          fi
+
+          if [ "$GITHUB_EVENT_NAME" != push ]; then
+            echo "publish=yes" >> "$GITHUB_OUTPUT"
+            echo "Publishing $version — asked for by hand." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Read out of the file on both sides rather than out of the diff, so
+          # that a reformatted line, or a merge carrying the same version along
+          # a second time, is not mistaken for a bump.
+          previous=$(git show "${{ github.event.before }}:gradle.properties" 2>/dev/null |
+            sed -n 's/^pluginVersion *= *//p' | tr -d '[:space:]')
+
+          if [ "$previous" = "$version" ]; then
+            echo "publish=no" >> "$GITHUB_OUTPUT"
+            echo "pluginVersion is still $version — nothing to publish." >> "$GITHUB_STEP_SUMMARY"
+          elif [ -z "$previous" ]; then
+            # A force-push or a first push: what came before is not there to
+            # read, and guessing either publishes nothing or publishes twice.
+            # Run workflow says which.
+            echo "publish=no" >> "$GITHUB_OUTPUT"
+            echo "::warning::cannot read pluginVersion at ${{ github.event.before }} — not publishing $version on a guess; use Run workflow if it should go out"
+            echo "The version before this push could not be read, so it was left alone. Run workflow publishes $version." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "publish=yes" >> "$GITHUB_OUTPUT"
+            echo "pluginVersion moved $previous → $version. Publishing." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # 21 because the platform's own classes are Java 21; the plugin is still
+      # emitted for 17 (build.gradle.kts).
+      - uses: actions/setup-java@v4
+        if: steps.gate.outputs.publish == 'yes'
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.gate.outputs.publish == 'yes'
+
+      # `check` is the tests. `verifyPlugin` is the promise `sinceBuild` makes:
+      # it reads the plugin against the oldest IDE that claim covers, the one it
+      # is built on and the newest released, with the same verifier JetBrains
+      # runs on what arrives. It downloads those IDEs, which is why this job
+      # takes minutes — a version cannot be taken back off the Marketplace, so
+      # it is worth waiting for, and the gate is what keeps ordinary pushes from
+      # paying it.
+      #
+      # `fetchDeepDrawLib` pulls the pinned DeepDraw build from the CDN here, so
+      # a version can only be published once the library CI has published its
+      # own. A build failing on a 404 for `v<deepdrawVersion>` is that, and the
+      # fix is to wait for the library, not to touch this repo.
+      - name: Check
+        if: steps.gate.outputs.publish == 'yes'
+        run: ./gradlew check verifyPlugin --console=plain
+
+      - name: Publish to the JetBrains Marketplace
+        if: steps.gate.outputs.publish == 'yes'
+        env:
+          PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+          CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
+        run: ./gradlew publishPlugin --console=plain
