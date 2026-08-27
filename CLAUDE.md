@@ -201,15 +201,19 @@ the only way to try a library change and a plugin change in one sitting.
 ./gradlew publishPlugin  # upload that zip to the Marketplace (PUBLISH_TOKEN)
 ```
 
-A release is a version `main` has not released yet:
-`.github/workflows/release.yml` runs on every push to `main` and asks whether
-`v<pluginVersion>` is already tagged. If it is, the job stops in seconds, which
-is what almost every push does. If it is not, it runs `check` and `verifyPlugin`,
-publishes, then writes the tag and a GitHub release with the same zip attached.
-The tag is the record of a release rather than the request for one — written
-after the upload, by the job that made it — so the version cannot be tagged
-without being published, and every other push cannot pay for the verifier's IDE
-downloads. `publishPlugin` by hand is the fallback, not the route. The Marketplace page itself was created once, by hand, from a zip —
+A release is a push to `main` that moves `pluginVersion`:
+`.github/workflows/release.yml` runs on every push and compares the version in
+this commit with the version in the one the push started from. Equal — which is
+almost every push — and the job stops in seconds, before it can spend minutes
+downloading IDEs for the verifier. Different, and it runs `check` and
+`verifyPlugin`, publishes, and records the release on GitHub with the same zip
+attached.
+
+**The version is the request, and the tag is only the record.** Asking the
+version directly is what leaves nothing to keep in step with it: no tag to push
+by hand, none to forget, none naming a version nobody released. The `v` tag
+exists because a GitHub release is a tag — written by `gh release create` after
+the upload succeeded. `publishPlugin` by hand is the fallback, not the route. The Marketplace page itself was created once, by hand, from a zip —
 the upload API only writes to a page that already exists. Signing and the token are read
 out of the environment and nothing else — a key or a token in a file here would
 be a key or a token in the repository. The channel is derived from

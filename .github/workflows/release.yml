@@ -1,18 +1,19 @@
-# Releases the plugin: a version that has not been released yet is the trigger,
-# the Marketplace is the destination, and a tag plus a GitHub release with the
-# same zip attached is the record.
+# Releases the plugin: a change to `pluginVersion` is the trigger, the
+# Marketplace is the destination, and a GitHub release with the same zip
+# attached is the record.
 #
 # **Pushing to `main` is the whole of it.** `pluginVersion` in gradle.properties
 # is the version — written by `deepdraw/sync-js.sh`, because the library and
 # everything embedding it share one number — and the first step of the job asks
-# whether `v<pluginVersion>` has been released already. If it has, the job stops
-# there, which is what almost every push to `main` does and it costs seconds. If
-# it has not, that push is a release: checks, upload, tag, GitHub release.
+# whether this push *changed* it. Almost no push does, and the job stops there
+# in seconds. The one that does is the release: checks, upload, GitHub release.
 #
-# So a release is made by bumping the version and merging it, and the tag is
-# written by the job that published rather than by the hand that asked for it —
-# a tag naming a version nobody released, or a release the tag disagrees with,
-# is not a state this can reach.
+# **The version decides, not a tag.** The version is already the one true
+# statement of what this build is, and asking it directly means there is nothing
+# to keep in step with it: no tag to push by hand, none to forget, and none that
+# can name a version nobody released. The tag that exists afterwards is written
+# by `gh release create` — a GitHub release *is* a tag — so it is the record of
+# the release rather than the request for one.
 #
 # Two secrets, both under Settings → Secrets and variables → Actions:
 #
@@ -27,11 +28,11 @@ name: Release
 on:
   push:
     branches: [main]
-  # Re-runs a release that failed. The version gate above is what makes that
-  # safe to press: it does nothing at all once `v<pluginVersion>` exists. A
-  # re-run after the upload itself succeeded but the tag was never written
-  # stops at the Marketplace, which will not take a version it already has;
-  # that refusal is the correct one.
+  # Re-runs a release that failed after `pluginVersion` had already landed —
+  # there is no push left to carry the change, so a hand on this button means
+  # "release what `main` says now". It skips the gate for that reason. Pressed
+  # on a version that went up already, it stops at the Marketplace, which will
+  # not take a version it has; that refusal is the correct one.
   workflow_dispatch:
 
 permissions:
@@ -48,11 +49,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        # The whole history, because the question below is asked of the commit
+        # this push started from, which a shallow checkout does not have.
+        with:
+          fetch-depth: 0
 
-      # The one question that decides whether this push is a release. Asked of
-      # the tags rather than of the Marketplace: the tag is written last, by the
-      # job that published, so a version with a tag is a version that went up.
-      - name: Has this version been released?
+      # The one question that decides whether this push is a release: did it
+      # change `pluginVersion`? Read out of the file on both sides rather than
+      # out of the diff, so that reformatting the line, or a merge that brings
+      # the same version along a second time, is not mistaken for a bump.
+      - name: Did this push change the version?
         id: version
         run: |
           version=$(sed -n 's/^pluginVersion *= *//p' gradle.properties | tr -d '[:space:]')
@@ -61,12 +67,31 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1; then
+
+          if [ "$GITHUB_EVENT_NAME" != push ]; then
+            # Run workflow, by hand: release what main says, gate skipped.
+            echo "new=true" >> "$GITHUB_OUTPUT"
+            echo "Releasing $version — asked for by hand." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          before='${{ github.event.before }}'
+          previous=$(git show "$before:gradle.properties" 2>/dev/null |
+            sed -n 's/^pluginVersion *= *//p' | tr -d '[:space:]')
+
+          if [ -z "$previous" ]; then
+            # A force-push or a first push: what came before is not there to
+            # read, and guessing it either releases nothing or releases twice.
+            # Run workflow says which.
             echo "new=false" >> "$GITHUB_OUTPUT"
-            echo "v$version is released already — nothing to do." >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::cannot read pluginVersion at $before — not releasing $version on a guess; use Run workflow if it should go out"
+            echo "The version before this push could not be read, so it was left alone. Run workflow releases $version." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$previous" = "$version" ]; then
+            echo "new=false" >> "$GITHUB_OUTPUT"
+            echo "pluginVersion is still $version — nothing to release." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "new=true" >> "$GITHUB_OUTPUT"
-            echo "Releasing v$version." >> "$GITHUB_STEP_SUMMARY"
+            echo "pluginVersion moved $previous → $version. Releasing." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       # 21 because the platform's own classes are Java 21; the plugin is still
@@ -105,18 +130,11 @@ jobs:
           PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
         run: ./gradlew publishPlugin --console=plain
 
-      # Written after the upload, never before: the tag is this workflow's
-      # record that the version went out, and it is what stops the next push to
-      # `main` from publishing the same one again.
-      - name: Tag the commit that was released
-        if: steps.version.outputs.new == 'true'
-        run: |
-          version="${{ steps.version.outputs.version }}"
-          git tag "v$version"
-          git push origin "v$version"
-
       # The same zip that went to the Marketplace, kept where a reader who wants
-      # "Install Plugin from Disk…" can reach it without an account.
+      # "Install Plugin from Disk…" can reach it without an account. The `v` tag
+      # is written here, by `gh release create`, and only after the upload
+      # succeeded: it marks the commit that was released rather than asking for
+      # a release.
       - name: GitHub release
         if: steps.version.outputs.new == 'true'
         env:

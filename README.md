@@ -63,11 +63,10 @@ then **Settings → Plugins → ⚙ → Install Plugin from Disk…**.
 ## Publishing to the Marketplace
 
 **A new version on `main` is the release.** `.github/workflows/release.yml` runs
-on every push to `main`, and its first step asks one question: has
-`v<pluginVersion>` been released already? Almost always it has, and the job
-stops there in seconds. When it has not, that push is a release — the checks
-run, the zip goes to the Marketplace, and the job writes the `v` tag and a
-GitHub release with the same zip attached.
+on every push to `main`, and its first step asks one question: did this push
+change `pluginVersion`? Almost none do, and the job stops there in seconds. The
+one that does is a release — the checks run, the zip goes to the Marketplace,
+and a GitHub release with the same zip attached records it.
 
 So releasing is bumping the version and merging it:
 
@@ -78,16 +77,20 @@ git commit -am "Take the shared DeepDraw version, 0.6.2" && git push
 
 The version itself is never typed into this repo — it moves with
 `deepdraw/sync-js.sh`, since the library and everything embedding it share one
-number. The tag is written *by the job that published*, after the upload
-succeeds, so a tag naming a version nobody released, or a release the tag
-disagrees with, is not a state this can reach.
+number. Nothing else has to agree with it: the version *is* the request, so
+there is no tag to push by hand, none to forget, and none that can name a
+version nobody released. The `v` tag appears afterwards because a GitHub
+release is a tag, written by the job that published, after the upload.
 
 The build fetches the pinned DeepDraw bundle from the CDN, so a version can only
 be released once the library's own CI has published it. A release failing on a
 404 for `v<deepdrawVersion>` is that, and the fix is to wait.
 
-**Re-running is safe.** Settings → Actions → Release → *Run workflow* does
-nothing once the tag exists; it is there for a release that failed halfway.
+**Run workflow releases whatever `main` says**, gate and all skipped —
+Settings → Actions → Release → *Run workflow*. It is for a release that failed
+after the version bump had already landed, when there is no push left to carry
+it. On a version that already went up it stops at the Marketplace, which will
+not take one twice.
 
 **One secret is required**, under Settings → Secrets and variables → Actions:
 `PUBLISH_TOKEN`, from plugins.jetbrains.com → your profile → **My Tokens**. The
