@@ -117,6 +117,12 @@ sealed class ExportAction(private val kind: String) : AnAction(), DumbAware {
         // than the drawing's title: in an editor the file is the thing that has
         // a name.
         val name = "${Formats.baseName(editor.file.name)}.deepdraw.$kind"
+        // The newer platform deprecates this constructor for one that takes the
+        // extension singly, and 2023.3 — which `sinceBuild` promises — has no
+        // other. Compiled here it is a call the newer IDEs still answer and only
+        // grumble about; written the newer way it would be a `NoSuchMethodError`
+        // on the oldest IDE this plugin claims. It changes the day `sinceBuild`
+        // does, not before.
         val descriptor = FileSaverDescriptor("Export Drawing", "Where to write $name", kind)
         val chosen: VirtualFileWrapper = FileChooserFactory.getInstance()
             .createSaveFileDialog(descriptor, project)

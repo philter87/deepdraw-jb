@@ -122,6 +122,16 @@ the browser treats as opaque, which the icon picker's `fetch` then has to talk
 its way out of. The handler resolves every path against a fixed resources root
 and 404s anything that escapes it.
 
+**The handler extends `CefResourceHandlerAdapter`, never the interface.** JCEF
+carries two APIs in one interface — `processRequest`/`readResponse` and the
+newer `open`/`read`/`skip` — and which of them are abstract depends on the JBR
+the reader's IDE ships. A class that implements the interface directly is
+complete against the JCEF it was built on and three methods short against a
+newer one, which the page finds out as an `AbstractMethodError` the first time
+it asks for a file. The adapter has whichever set its own JCEF declares, and its
+`open` and `read` are defined to fall back to the older pair, which is what this
+handler implements: they are the only ones 2023.3 has.
+
 **The page cannot speak first.** `window.__deepdrawPost` is built from a
 `JBCefJSQuery`, which only exists on the plugin's side. So the page defines
 `__deepdrawBoot` and waits; when the load finishes, the plugin writes the bridge
@@ -185,6 +195,7 @@ the only way to try a library change and a plugin change in one sitting.
 
 ```bash
 ./gradlew check          # compile, the format tests, and the plugin verifier's structure checks
+./gradlew verifyPlugin   # read the plugin against the IDEs it claims (a download each)
 ./gradlew buildPlugin    # the installable zip, in build/distributions
 ./gradlew runIde         # a sandbox IDE with the plugin in it
 ./gradlew publishPlugin  # upload that zip to the Marketplace (PUBLISH_TOKEN)
@@ -200,6 +211,15 @@ be a key or a token in the repository. The channel is derived from
 `pluginVersion` rather than passed, so a pre-release cannot reach the default
 channel by someone forgetting a flag. README, "Publishing to the Marketplace",
 is the walk-through.
+
+`verifyPlugin` reads three IDEs: the oldest `sinceBuild` claims, the one this
+builds against, and the newest released. The newest end is the one that earns
+its download — no `untilBuild` is a promise about IDEs that do not exist yet,
+and JCEF's own interfaces gained methods in 2025.3, which a plugin built on
+2024.3 meets as a missing method rather than a compile error. The Marketplace
+runs the same verification after an upload and files what it finds as an issue,
+which is a slow way to hear it. From 2025.3 the Community and Ultimate downloads
+are one, so the newest entry is `IntellijIdeaUltimate`.
 
 `runIde` is the only way to see the canvas: JCEF needs a display, so nothing
 about the browser is covered by a test. What *is* covered is the part that

@@ -176,14 +176,24 @@ intellijPlatform {
     }
 
     /**
-     * `sinceBuild` is a promise about IDEs this build never sees, so it is
+     * `sinceBuild` is a promise about IDEs this build never sees, and no
+     * `untilBuild` is a promise about every IDE after them, so both ends are
      * checked rather than asserted: the verifier reads the plugin against the
-     * oldest one it claims and the one it is built on.
+     * oldest IDE it claims, the one it is built on, and the newest released.
+     *
+     * The newest is not decoration. JCEF is not frozen — the browser's own
+     * interfaces gained methods between 2024.3 and 2025.3 — and a plugin built
+     * on the older one and run on the newer is exactly where that shows up. The
+     * Marketplace verifies against the newest itself and reports what it finds,
+     * which is a slow way to hear it.
      */
     pluginVerification {
         ides {
             ide(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaCommunity, "2023.3.8")
             ide(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaCommunity, "2024.3.5")
+            // 2025.3 is the release where Community and Ultimate became one
+            // download, so from there on the newest IDE has only the one name.
+            ide(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaUltimate, "2025.3")
         }
     }
 }

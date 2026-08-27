@@ -5,6 +5,7 @@ import org.cef.browser.CefFrame
 import org.cef.callback.CefCallback
 import org.cef.callback.CefSchemeHandlerFactory
 import org.cef.handler.CefResourceHandler
+import org.cef.handler.CefResourceHandlerAdapter
 import org.cef.misc.IntRef
 import org.cef.misc.StringRef
 import org.cef.network.CefRequest
@@ -87,8 +88,25 @@ class DeepDrawSchemeHandlerFactory : CefSchemeHandlerFactory {
  * it asks for. The whole body is read up front: the largest of them is the
  * library bundle, and holding one copy of it for the length of a request costs
  * less than the machinery for streaming it would.
+ *
+ * **It extends the adapter rather than implementing `CefResourceHandler`, and
+ * that is not a matter of taste.** JCEF grew a second API — `open`, `read`,
+ * `skip` — and in the JBR the newer IDEs ship, those are abstract members of
+ * the interface. A class that implements the interface directly is complete
+ * against the JCEF this plugin is built on and missing three methods against
+ * the one it runs on, which is an `AbstractMethodError` the first time the page
+ * asks for a file. `CefResourceHandlerAdapter` has them, whichever JCEF it is
+ * from, so the plugin's editor keeps working on an IDE released after it.
+ *
+ * What is overridden below is the older API, deliberately: it is the only one
+ * present in the JCEF of 2023.3, which `sinceBuild` promises. The adapter's
+ * `open` and `read` are documented to fall back to `processRequest` and
+ * `readResponse` — setting `handleRequest` to false and `bytesRead` to -1 is
+ * exactly that handshake — so the newer JCEF routes a request straight back
+ * here. Implementing the newer pair instead would name `LongRef` and
+ * `CefResourceReadCallback`, classes that do not exist in the older runtime.
  */
-private class DeepDrawResourceHandler(private val url: String?) : CefResourceHandler {
+private class DeepDrawResourceHandler(private val url: String?) : CefResourceHandlerAdapter() {
     private var body: ByteArray = ByteArray(0)
     private var mime = "application/octet-stream"
     private var offset = 0
