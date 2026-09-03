@@ -24,8 +24,9 @@
       Bound by file name rather than by a file type: a `.deepdraw.html` is an
       HTML file and a `.deepdraw.json` is a JSON file, and declaring a type for
       either would take them away from the editors that already understand them.
-      The drawing is placed before the default editor, so clicking one opens the
-      canvas and the text is the tab beside it.
+      The drawing is placed before the default editor, so the canvas is the first
+      tab and the text is the tab beside it; clicking a drawing opens the canvas
+      because the editor is navigable (see CLAUDE.md §3).
     -->
     <fileEditorProvider implementation="ai.deepdraw.jetbrains.DeepDrawFileEditorProvider"/>
 

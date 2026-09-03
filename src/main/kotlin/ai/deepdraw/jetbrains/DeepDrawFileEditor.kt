@@ -12,9 +12,12 @@ import com.intellij.openapi.fileEditor.FileDocumentManagerListener
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorLocation
 import com.intellij.openapi.fileEditor.FileEditorState
+import com.intellij.openapi.fileEditor.NavigatableFileEditor
+import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.pom.Navigatable
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import com.intellij.util.Alarm
@@ -51,7 +54,7 @@ import javax.swing.JPanel
 class DeepDrawFileEditor(
     private val project: Project,
     private val file: VirtualFile,
-) : UserDataHolderBase(), FileEditor {
+) : UserDataHolderBase(), FileEditor, NavigatableFileEditor {
 
     private val panel = JPanel(BorderLayout())
     private val changes = PropertyChangeSupport(this)
@@ -318,6 +321,28 @@ class DeepDrawFileEditor(
     }
 
     override fun getCurrentLocation(): FileEditorLocation? = null
+
+    /**
+     * Being first among the file's editors puts the canvas in the first tab; it
+     * does not make it the tab that opens. Clicking a file in the project view —
+     * like Go to File, and like anything else that reaches a file through a
+     * [Navigatable] — opens it and then hands the file to the first editor that
+     * can *navigate*, which selects that editor. An editor that cannot navigate
+     * is passed over, and the drawing would open showing its own JSON.
+     *
+     * So this editor can be navigated to, for the one destination it has: the
+     * file itself. A [Navigatable] carrying a real position is left to the text
+     * editor — a stack trace, a Find in Files hit and Go to Line all mean a
+     * line, and a canvas has no lines to show them at.
+     */
+    override fun canNavigateTo(navigatable: Navigatable): Boolean =
+        navigatable is OpenFileDescriptor &&
+            navigatable.file == file &&
+            navigatable.line <= 0 &&
+            navigatable.offset <= 0
+
+    /** Selecting this editor is the whole of the journey; there is nowhere further to go. */
+    override fun navigateTo(navigatable: Navigatable) = Unit
 
     /**
      * The drawing comes forward. If the text changed while it was away — the

@@ -77,11 +77,24 @@ rather than through the action bus, so `onTitleChange` is wired to the same
 `FileType` for `.deepdraw.html` or `.deepdraw.json` would take those files away
 from the HTML and JSON editors that already understand them.
 
-`PLACE_BEFORE_DEFAULT_EDITOR` is what makes clicking a drawing open the drawing:
-the canvas is the first tab and the text is the tab beside it. That is
-`deepdraw-vs`'s "Reopen in Text Editor" command, except that it is always there
-rather than being something to go and find — which is why no such action exists
-here.
+`PLACE_BEFORE_DEFAULT_EDITOR` puts the canvas in the first tab, with the text
+the tab beside it. That is `deepdraw-vs`'s "Reopen in Text Editor" command,
+except that it is always there rather than being something to go and find —
+which is why no such action exists here.
+
+**Being first is not the same as being the tab that opens, and the second half
+is `NavigatableFileEditor`.** Clicking a file in the project view does not open
+a file, it navigates to one — as do Go to File, Recent Files and everything else
+that reaches a file through a `Navigatable`. Having opened it, the platform
+hands the file to the first editor that can *navigate* and selects that one,
+passing over every editor that cannot. Without this the canvas is the first tab
+and the text tab is the one in front, which reads as the drawing not opening at
+all.
+
+So the editor answers `canNavigateTo` — for the one destination it has, the file
+itself. A descriptor carrying a real position is left to the text editor: a
+stack trace, a Find in Files hit and Go to Line all mean a line, and a canvas
+has no lines to show them at.
 
 ## 4. The two formats (`DeepDrawFormat.kt`)
 
