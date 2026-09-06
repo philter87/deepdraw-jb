@@ -39,9 +39,14 @@ object Formats {
      * The corner's second name, when a generator produced the file. It is chrome
      * and never enters the document, so saving has to carry it across by hand or
      * re-saving a drawing would quietly un-credit whatever drew it.
+     *
+     * Both domains are matched because the corner's name moved from deepdraw.ai
+     * to deepdraw.app: every page exported before that still says the old one,
+     * and matching only the new one would un-credit exactly the files this
+     * exists for.
      */
     private val CREDIT_BLOCK =
-        Regex("""<div class="dd-credit">[\s\S]*?deepdraw\.ai</a>([\s\S]*?)</div>""")
+        Regex("""<div class="dd-credit">[\s\S]*?deepdraw\.(?:ai|app)</a>([\s\S]*?)</div>""")
 
     private const val MARK_TITLE = "__DEEPDRAW_TITLE__"
     private const val MARK_DOCUMENT = "__DEEPDRAW_DOCUMENT_JSON__"

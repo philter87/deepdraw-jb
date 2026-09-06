@@ -70,6 +70,23 @@ class FormatTest {
         )
     }
 
+    /**
+     * The corner's name moved from deepdraw.ai to deepdraw.app, and every page
+     * exported before that still says the old one. Reading the credit out of
+     * them has to keep working, or opening one and saving it drops the
+     * generator's name — the one thing the credit block exists to prevent.
+     */
+    @Test
+    fun Should_KeepTheCredit_When_ThePageNamesTheOldDomain() {
+        val credit =
+            """ &middot; <a href="https://example.com" target="_blank" rel="noreferrer noopener">a generator</a>"""
+        val legacy =
+            Formats.serialize(drawing, DeepDrawFormat.HTML, template, credit)
+                .replace("deepdraw.app", "deepdraw.ai")
+        assertTrue("the fixture should name the old domain", legacy.contains("deepdraw.ai</a>"))
+        assertEquals(credit, Formats.parseFile(legacy, DeepDrawFormat.HTML).credit)
+    }
+
     @Test
     fun Should_LeaveNoMarkBehind_When_ThePageIsWritten() {
         val html = Formats.serialize(drawing, DeepDrawFormat.HTML, template)
