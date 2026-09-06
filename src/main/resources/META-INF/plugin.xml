@@ -1,7 +1,7 @@
 <idea-plugin>
   <id>ai.deepdraw.jetbrains</id>
   <name>DeepDraw</name>
-  <vendor url="https://deepdraw.ai">philter87</vendor>
+  <vendor url="https://deepdraw.app">philter87</vendor>
 
   <description><![CDATA[
     Draw and read <b>DeepDraw</b> drawings in JetBrains IDEs. Every edit is saved to the file you opened.

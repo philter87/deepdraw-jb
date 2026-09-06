@@ -1,7 +1,7 @@
 # DeepDraw for JetBrains IDEs
 
 Opens `.deepdraw.html` and `.deepdraw.json` files as drawings instead of as
-text. It is [DeepDraw](https://deepdraw.ai) itself running in the IDE's embedded
+text. It is [DeepDraw](https://deepdraw.app) itself running in the IDE's embedded
 browser — the same canvas, hierarchy, notes and icons — with the file you opened
 as the place everything is stored.
 

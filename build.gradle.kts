@@ -131,7 +131,7 @@ intellijPlatform {
         version = providers.gradleProperty("pluginVersion")
         vendor {
             name = "philter87"
-            url = "https://deepdraw.ai"
+            url = "https://deepdraw.app"
         }
         ideaVersion {
             // JCEF, which the whole editor stands on, and the platform APIs
