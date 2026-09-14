@@ -86,6 +86,38 @@ jobs:
             echo "pluginVersion moved $previous → $version. Publishing." >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # `fetchDeepDrawLib` pulls the pinned library from the CDN, and a bump
+      # lands here in the same minute it lands in deepdraw, whose CI takes
+      # minutes to publish it. So wait for it rather than fail on a 404: look
+      # once a minute, give up after twenty. The files are the ones the task
+      # needs, all of them, because the upload writes them in no set order.
+      - name: Wait for the library on the CDN
+        if: steps.gate.outputs.publish == 'yes'
+        run: |
+          version=$(sed -n 's/^deepdrawVersion *= *//p' gradle.properties | tr -d '[:space:]')
+          if [ -z "$version" ]; then
+            echo "::error::gradle.properties has no deepdrawVersion"
+            exit 1
+          fi
+          base="https://deepdrawjs.blob.core.windows.net/release/v$version"
+          deadline=$((SECONDS + 20 * 60))
+          while :; do
+            missing=()
+            for file in deepdraw.js template.html LICENSE NOTICE; do
+              curl -sfI --max-time 30 -o /dev/null "$base/$file" || missing+=("$file")
+            done
+            if [ ${#missing[@]} -eq 0 ]; then
+              echo "DeepDraw v$version is on the CDN."
+              exit 0
+            fi
+            if [ $SECONDS -ge $deadline ]; then
+              echo "::error::DeepDraw v$version is still not on the CDN after 20 minutes (missing: ${missing[*]}). Check deepdraw's publish-lib job, then Run workflow here."
+              exit 1
+            fi
+            echo "DeepDraw v$version is not on the CDN yet (missing: ${missing[*]}) — looking again in a minute."
+            sleep 60
+          done
+
       # 21 because the platform's own classes are Java 21; the plugin is still
       # emitted for 17 (build.gradle.kts).
       - uses: actions/setup-java@v4
@@ -105,10 +137,8 @@ jobs:
       # it is worth waiting for, and the gate is what keeps ordinary pushes from
       # paying it.
       #
-      # `fetchDeepDrawLib` pulls the pinned DeepDraw build from the CDN here, so
-      # a version can only be published once the library CI has published its
-      # own. A build failing on a 404 for `v<deepdrawVersion>` is that, and the
-      # fix is to wait for the library, not to touch this repo.
+      # `fetchDeepDrawLib` pulls the pinned DeepDraw build from the CDN here,
+      # which the step above has already waited for.
       - name: Check
         if: steps.gate.outputs.publish == 'yes'
         run: ./gradlew check verifyPlugin --console=plain
